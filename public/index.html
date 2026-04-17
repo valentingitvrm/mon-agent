@@ -212,8 +212,8 @@
           body: JSON.stringify({ grille, revele, drapeau, rows: config.rows, cols: config.cols })
         });
         const data = await res.json();
-        box.textContent = '💡 ' + data.indice;
-        const match = data.indice.match(/[Rr]ang[ée]e?\s*(\d+)[^\d]+[Cc]olonne?\s*(\d+)/);
+        box.innerHTML = '💡 ' + data.indice.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>');
+       const match = data.indice.match(/\((\d+),\s*(\d+)\)/);
         if (match) {
           caseSurlignee = { r: parseInt(match[1]), c: parseInt(match[2]) };
           afficher();
