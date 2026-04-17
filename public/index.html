@@ -54,6 +54,9 @@
 </head>
 <body>
   <h1>💣 Démineur</h1>
+  <div style="margin-bottom: 1rem;">
+  <input id="nom-joueur" type="text" placeholder="Ton prénom..." style="text-align:center; background:#16213e; color:white; border:1px solid #0f3460; width:200px;">
+</div>
   <div class="difficulte">
     <button onclick="choisir('facile')" id="btn-facile" class="actif">Facile</button>
     <button onclick="choisir('moyen')" id="btn-moyen">Moyen</button>
@@ -158,16 +161,18 @@
         revele[r][c] = true; partieTerminee = true;
         clearInterval(chronoInterval);
         toutReveler();
-        document.getElementById('message').textContent = '💥 Perdu !';
-        document.getElementById('btn-indice').disabled = true;
-        afficher(); return;
+       document.getElementById('message').textContent = '💥 Perdu !';
+document.getElementById('btn-indice').disabled = true;
+sauvegarderScore(false);
+afficher(); return;
       }
       reveler(r, c);
       if (verifierVictoire()) {
-        partieTerminee = true; clearInterval(chronoInterval);
-        document.getElementById('message').textContent = '🎉 Gagné en ' + secondes + 's !';
-        document.getElementById('btn-indice').disabled = true;
-      }
+  partieTerminee = true; clearInterval(chronoInterval);
+  document.getElementById('message').textContent = '🎉 Gagné en ' + secondes + 's !';
+  document.getElementById('btn-indice').disabled = true;
+  sauvegarderScore(true);
+}
       afficher();
     }
 
@@ -250,7 +255,14 @@
         }
       }
     }
-
+async function sauvegarderScore(victoire) {
+  const joueur = document.getElementById('nom-joueur').value.trim() || 'Anonyme';
+  await fetch('/score', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ joueur, niveau: Object.keys(CONFIGS).find(k => CONFIGS[k] === config), temps: secondes, victoire })
+  });
+}
     init();
   </script>
 </body>
