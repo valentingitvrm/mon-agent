@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Démineur</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: white;
+    }
+    h1 { font-size: 2rem; margin-bottom: 0.5rem; letter-spacing: 2px; }
+    .infos { display: flex; gap: 2rem; margin-bottom: 1rem; font-size: 1.1rem; }
+    .infos span { background: #16213e; padding: 6px 16px; border-radius: 8px; }
+    #message { font-size: 1.3rem; font-weight: bold; margin-bottom: 0.8rem; min-height: 2rem; }
+    #grille { display: inline-grid; gap: 3px; background: #0f3460; padding: 10px; border-radius: 12px; }
+    .case {
+      width: 36px; height: 36px; background: #e0e0e0; border-radius: 5px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold; font-size: 1rem; cursor: pointer; user-select: none; transition: background 0.1s;
+    }
+    .case:hover { background: #f0f0f0; }
+    .case.revelée { background: #c8c8c8; cursor: default; }
+    .case.mine { background: #e74c3c; }
+    .case.drapeau { background: #f39c12; }
+    .case.surlignée { background: #2ecc71 !important; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+    .n1{color:#2980b9} .n2{color:#27ae60} .n3{color:#e74c3c}
+    .n4{color:#8e44ad} .n5{color:#c0392b} .n6{color:#16a085}
+    .n7{color:#2c3e50} .n8{color:#7f8c8d}
+    .boutons { display: flex; gap: 10px; margin-top: 1.2rem; }
+    .boutons button { padding: 10px 28px; font-size: 1rem; border: none; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+    #rejouer { background: #e94560; color: white; }
+    #rejouer:hover { background: #c0392b; }
+    #btn-indice { background: #f39c12; color: white; }
+    #btn-indice:hover { background: #d68910; }
+    #btn-indice:disabled { background: #7f8c8d; cursor: default; }
+    .difficulte { display: flex; gap: 10px; margin-bottom: 1rem; }
+    .difficulte button { padding: 6px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; background: #16213e; color: white; transition: background 0.2s; }
+    .difficulte button.actif { background: #e94560; }
+    .difficulte button:hover { background: #0f3460; }
+    #indice-box {
+      display: none; margin-top: 1rem; background: #16213e;
+      border-left: 4px solid #f39c12; padding: 12px 16px; border-radius: 8px;
+      max-width: 500px; font-size: 0.95rem; line-height: 1.5; color: #ecf0f1;
+    }
+  </style>
+</head>
+<body>
+  <h1>💣 Démineur</h1>
+  <div class="difficulte">
+    <button onclick="choisir('facile')" id="btn-facile" class="actif">Facile</button>
+    <button onclick="choisir('moyen')" id="btn-moyen">Moyen</button>
+    <button onclick="choisir('difficile')" id="btn-difficile">Difficile</button>
+  </div>
+  <div class="infos">
+    <span>💣 <span id="compteur-mines">0</span></span>
+    <span>⏱️ <span id="chrono">0</span>s</span>
+  </div>
+  <div id="message"></div>
+  <div id="grille"></div>
+  <div class="boutons">
+    <button id="rejouer" onclick="init()">🔄 Rejouer</button>
+    <button id="btn-indice" onclick="demanderIndice()">💡 Indice IA</button>
+  </div>
+  <div id="indice-box"></div>
+
+  <script>
+    const CONFIGS = {
+      facile:    { cols: 9,  rows: 9,  mines: 10 },
+      moyen:     { cols: 16, rows: 16, mines: 40 },
+      difficile: { cols: 30, rows: 16, mines: 99 },
+    };
+    let config = CONFIGS.facile;
+    let grille = [], revele = [], drapeau = [];
+    let partieTerminee = false, premierClic = true;
+    let chronoInterval, secondes = 0;
+    let caseSurlignee = null;
+
+    function choisir(niveau) {
+      config = CONFIGS[niveau];
+      document.querySelectorAll('.difficulte button').forEach(b => b.classList.remove('actif'));
+      document.getElementById('btn-' + niveau).classList.add('actif');
+      init();
+    }
+
+    function init() {
+      clearInterval(chronoInterval);
+      secondes = 0;
+      document.getElementById('chrono').textContent = '0';
+      document.getElementById('message').textContent = '';
+      document.getElementById('indice-box').style.display = 'none';
+      document.getElementById('btn-indice').disabled = false;
+      document.getElementById('btn-indice').textContent = '💡 Indice IA';
+      partieTerminee = false; premierClic = true; caseSurlignee = null;
+      const { cols, rows, mines } = config;
+      grille = Array(rows).fill(null).map(() => Array(cols).fill(0));
+      revele = Array(rows).fill(null).map(() => Array(cols).fill(false));
+      drapeau = Array(rows).fill(null).map(() => Array(cols).fill(false));
+      document.getElementById('compteur-mines').textContent = mines;
+      afficher();
+    }
+
+    function placerMines(exclR, exclC) {
+      const { cols, rows, mines } = config;
+      let placed = 0;
+      while (placed < mines) {
+        const r = Math.floor(Math.random() * rows);
+        const c = Math.floor(Math.random() * cols);
+        if (grille[r][c] === -1) continue;
+        if (Math.abs(r - exclR) <= 1 && Math.abs(c - exclC) <= 1) continue;
+        grille[r][c] = -1; placed++;
+      }
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+          if (grille[r][c] !== -1) grille[r][c] = compterMines(r, c);
+    }
+
+    function compterMines(r, c) {
+      let count = 0;
+      for (let dr = -1; dr <= 1; dr++)
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = r + dr, nc = c + dc;
+          if (nr >= 0 && nr < config.rows && nc >= 0 && nc < config.cols)
+            if (grille[nr][nc] === -1) count++;
+        }
+      return count;
+    }
+
+    function reveler(r, c) {
+      if (r < 0 || r >= config.rows || c < 0 || c >= config.cols) return;
+      if (revele[r][c] || drapeau[r][c]) return;
+      revele[r][c] = true;
+      if (grille[r][c] === 0)
+        for (let dr = -1; dr <= 1; dr++)
+          for (let dc = -1; dc <= 1; dc++)
+            reveler(r + dr, c + dc);
+    }
+
+    function clic(r, c) {
+      if (partieTerminee || drapeau[r][c] || revele[r][c]) return;
+      if (premierClic) {
+        premierClic = false;
+        placerMines(r, c);
+        chronoInterval = setInterval(() => {
+          secondes++;
+          document.getElementById('chrono').textContent = secondes;
+        }, 1000);
+      }
+      caseSurlignee = null;
+      if (grille[r][c] === -1) {
+        revele[r][c] = true; partieTerminee = true;
+        clearInterval(chronoInterval);
+        toutReveler();
+        document.getElementById('message').textContent = '💥 Perdu !';
+        document.getElementById('btn-indice').disabled = true;
+        afficher(); return;
+      }
+      reveler(r, c);
+      if (verifierVictoire()) {
+        partieTerminee = true; clearInterval(chronoInterval);
+        document.getElementById('message').textContent = '🎉 Gagné en ' + secondes + 's !';
+        document.getElementById('btn-indice').disabled = true;
+      }
+      afficher();
+    }
+
+    function clicDroit(e, r, c) {
+      e.preventDefault();
+      if (partieTerminee || revele[r][c]) return;
+      drapeau[r][c] = !drapeau[r][c];
+      const drapeaux = drapeau.flat().filter(Boolean).length;
+      document.getElementById('compteur-mines').textContent = config.mines - drapeaux;
+      afficher();
+    }
+
+    function toutReveler() {
+      for (let r = 0; r < config.rows; r++)
+        for (let c = 0; c < config.cols; c++)
+          if (grille[r][c] === -1) revele[r][c] = true;
+    }
+
+    function verifierVictoire() {
+      for (let r = 0; r < config.rows; r++)
+        for (let c = 0; c < config.cols; c++)
+          if (grille[r][c] !== -1 && !revele[r][c]) return false;
+      return true;
+    }
+
+    async function demanderIndice() {
+      if (premierClic) {
+        const box = document.getElementById('indice-box');
+        box.style.display = 'block';
+        box.textContent = "💡 Commence par cliquer n'importe où pour démarrer la partie !";
+        return;
+      }
+      const btn = document.getElementById('btn-indice');
+      btn.disabled = true; btn.textContent = '⏳ Analyse...';
+      const box = document.getElementById('indice-box');
+      box.style.display = 'block';
+      box.textContent = "🤖 L'IA analyse la grille...";
+      try {
+        const res = await fetch('/indice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ grille, revele, drapeau, rows: config.rows, cols: config.cols })
+        });
+        const data = await res.json();
+        box.textContent = '💡 ' + data.indice;
+        const match = data.indice.match(/[Rr]ang[ée]e?\s*(\d+)[^\d]+[Cc]olonne?\s*(\d+)/);
+        if (match) {
+          caseSurlignee = { r: parseInt(match[1]), c: parseInt(match[2]) };
+          afficher();
+        }
+      } catch(e) {
+        box.textContent = "❌ Erreur : vérifie que le serveur tourne et que la clé API est valide.";
+      }
+      btn.disabled = false; btn.textContent = '💡 Indice IA';
+    }
+
+    function afficher() {
+      const el = document.getElementById('grille');
+      el.style.gridTemplateColumns = `repeat(${config.cols}, 36px)`;
+      el.innerHTML = '';
+      for (let r = 0; r < config.rows; r++) {
+        for (let c = 0; c < config.cols; c++) {
+          const div = document.createElement('div');
+          div.className = 'case';
+          if (caseSurlignee && caseSurlignee.r === r && caseSurlignee.c === c && !revele[r][c])
+            div.classList.add('surlignée');
+          if (drapeau[r][c] && !revele[r][c]) {
+            div.classList.add('drapeau'); div.textContent = '🚩';
+          } else if (!revele[r][c]) {
+            div.textContent = '';
+          } else if (grille[r][c] === -1) {
+            div.classList.add('mine', 'revelée'); div.textContent = '💣';
+          } else {
+            div.classList.add('revelée');
+            if (grille[r][c] > 0) { div.textContent = grille[r][c]; div.classList.add('n' + grille[r][c]); }
+          }
+          div.addEventListener('click', () => clic(r, c));
+          div.addEventListener('contextmenu', (e) => clicDroit(e, r, c));
+          el.appendChild(div);
+        }
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
